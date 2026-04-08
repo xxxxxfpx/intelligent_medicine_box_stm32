@@ -1,0 +1,23 @@
+# 编译输出
+Listings/
+Objects/
+
+# J-Link日志
+JLinkLog.txt
+
+# Keil编译依赖文件
+*.dep
+*.d
+
+# 备份文件
+*.bak
+*~
+
+# 临时文件
+*.tmp
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
