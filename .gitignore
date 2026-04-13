@@ -1,23 +1,25 @@
-# 编译输出
+# Keil编译产物
+*.o
+*.crf
+*.axf
+*.lst
+*.map
+*.htm
+*.lnp
+*.sct
+*.build_log.htm
+*.uvguix.*
+
+# 编译目录
+DebugConfig/
+stm32_smart_pillbox/
 Listings/
 Objects/
+RTE/
 
-# J-Link日志
-JLinkLog.txt
+# Trae IDE
+.trae/
+skills-lock.json
 
-# Keil编译依赖文件
-*.dep
-*.d
-
-# 备份文件
-*.bak
-*~
-
-# 临时文件
-*.tmp
-*.swp
-*.swo
-
-# 系统文件
-.DS_Store
-Thumbs.db
+# VS Code
+.vscode/
