@@ -7,8 +7,11 @@
 *.htm
 *.lnp
 *.sct
+*.d
+*.dep
 *.build_log.htm
 *.uvguix.*
+JLinkLog.txt
 
 # 编译目录
 DebugConfig/
