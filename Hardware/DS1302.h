@@ -24,18 +24,16 @@
 #define DS1302_DAT_Set()  GPIO_SetBits(DS1302_PORT, DS1302_DAT_PIN)
 
 typedef struct {
-    uint8_t second;     // 秒 0-59
-    uint8_t minute;     // 分 0-59
-    uint8_t hour;       // 时 0-23
-    uint8_t day;        // 日 1-31
-    uint8_t month;      // 月 1-12
-    uint8_t week;       // 星期 1-7
-    uint8_t year;       // 年 0-99
+    uint8_t second;
+    uint8_t minute;
+    uint8_t hour;
+    uint8_t day;
+    uint8_t month;
+    uint8_t week;
+    uint8_t year;
 } DS1302_TimeTypeDef;
 
 void DS1302_Init(void);
-void DS1302_WriteByte(uint8_t dat);
-uint8_t DS1302_ReadByte(void);
 void DS1302_WriteReg(uint8_t reg, uint8_t dat);
 uint8_t DS1302_ReadReg(uint8_t reg);
 void DS1302_SetTime(DS1302_TimeTypeDef* time);

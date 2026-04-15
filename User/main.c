@@ -8,22 +8,26 @@
 #include "stm32f10x.h"
 #include "Delay.h"
 #include "OLED.h"
-#include "ds1302.h"
+#include "DS1302.h"
 
 uint8_t DS1302_TestConnection(void)
 {
-    uint8_t writeData = 0xA5;
-    uint8_t readData;
+    uint8_t sec1, sec2;
     
-    DS1302_WriteReg(0x8E, 0x00);
-    DS1302_WriteReg(0xC0, writeData);
-    readData = DS1302_ReadReg(0xC1);
-    DS1302_WriteReg(0x8E, 0x80);
+    sec1 = DS1302_ReadReg(0x81);
+    Delay_ms(100);
+    sec2 = DS1302_ReadReg(0x81);
     
-    if(readData == writeData)
+    if(sec1 != sec2)
     {
         return 1;
     }
+    
+    if((sec1 & 0x7F) != 0xFF && (sec1 & 0x7F) != 0x00)
+    {
+        return 1;
+    }
+    
     return 0;
 }
 
@@ -48,7 +52,7 @@ int main(void)
     OLED_ShowString(1, 1, "Test Connect...");
     
     testResult = DS1302_TestConnection();
-    
+
     if(testResult)
     {
         OLED_ShowString(1, 1, "Connect: OK!   ");
