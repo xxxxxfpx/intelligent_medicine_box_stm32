@@ -1,5 +1,17 @@
 #include "stm32f10x.h"
 #include "Delay.h"
+
+static volatile uint32_t delayTime = 0;
+
+void Delay_Reset(void)
+{
+    delayTime = 0;
+}
+
+uint32_t Delay_GetTime(void)
+{
+    return delayTime;
+}
 /**
   * @brief  微秒级延时
   * @param  xus 延时时长，范围：0~233015
@@ -21,10 +33,11 @@ void Delay_us(uint32_t xus)
   */
 void Delay_ms(uint32_t xms)
 {
-	while(xms--)
-	{
-		Delay_us(1000);
-	}
+    while(xms--)
+    {
+        Delay_us(1000);
+        delayTime++;
+    }
 }
  
 /**

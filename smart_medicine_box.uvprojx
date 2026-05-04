@@ -703,21 +703,81 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\Delay.h</FilePath>
             </File>
+            <File>
+              <FileName>ESP8266.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\ESP8266.c</FilePath>
+            </File>
+            <File>
+              <FileName>Servo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\Servo.c</FilePath>
+            </File>
+            <File>
+              <FileName>MLX90614.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\MLX90614.c</FilePath>
+            </File>
+            <File>
+              <FileName>MQTTClient.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\MQTTClient.c</FilePath>
+            </File>
+            <File>
+              <FileName>GPS.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\GPS.c</FilePath>
+            </File>
+            <File>
+              <FileName>DS1302.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\DS1302.c</FilePath>
+            </File>
+            <File>
+              <FileName>ESP8266.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\ESP8266.h</FilePath>
+            </File>
+            <File>
+              <FileName>Servo.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\Servo.h</FilePath>
+            </File>
+            <File>
+              <FileName>MLX90614.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\MLX90614.h</FilePath>
+            </File>
+            <File>
+              <FileName>MQTTClient.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\MQTTClient.h</FilePath>
+            </File>
+            <File>
+              <FileName>DS1302.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\DS1302.h</FilePath>
+            </File>
+            <File>
+              <FileName>GPS.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\GPS.h</FilePath>
+            </File>
+            <File>
+              <FileName>USART1.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\USART1.c</FilePath>
+            </File>
+            <File>
+              <FileName>USART1.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\USART1.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>User</GroupName>
           <Files>
-            <File>
-              <FileName>ds1302.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\User\ds1302.h</FilePath>
-            </File>
-            <File>
-              <FileName>ds1302.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\ds1302.c</FilePath>
-            </File>
             <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
@@ -737,6 +797,11 @@
               <FileName>stm32f10x_it.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\stm32f10x_it.h</FilePath>
+            </File>
+            <File>
+              <FileName>Settings.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\Settings.h</FilePath>
             </File>
           </Files>
         </Group>

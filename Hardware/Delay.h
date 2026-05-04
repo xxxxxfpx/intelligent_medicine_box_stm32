@@ -4,5 +4,7 @@
 void Delay_us(uint32_t us);
 void Delay_ms(uint32_t ms);
 void Delay_s(uint32_t s);
+uint32_t Delay_GetTime(void);
+void Delay_Reset(void);
 
 #endif

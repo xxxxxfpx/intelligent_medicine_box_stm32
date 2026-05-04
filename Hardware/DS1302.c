@@ -6,6 +6,7 @@
 
 #include "ds1302.h"
 #include "Delay.h"
+#include "USART1.h"
 
 void DS1302_GPIO_Init(void)
 {
@@ -27,6 +28,7 @@ void DS1302_Init(void)
 {
     DS1302_GPIO_Init();
     Delay_ms(10);
+    Info("DS1302 Init OK\r\n");
 }
 
 void DS1302_WriteReg(uint8_t addr, uint8_t dat)
@@ -144,6 +146,8 @@ void DS1302_SetTime(DS1302_TimeTypeDef* time)
     DS1302_WriteReg(0x80, DS1302_ConvertToBcd(time->second));
     DS1302_WriteReg(0x8A, DS1302_ConvertToBcd(time->week));
     DS1302_WriteReg(0x8E, 0x80);
+    Info("DS1302 SetTime: %d/%02d/%02d %02d:%02d:%02d\r\n",
+         time->year, time->month, time->day, time->hour, time->minute, time->second);
 }
 
 void DS1302_GetTime(DS1302_TimeTypeDef* time)
@@ -165,6 +169,8 @@ void DS1302_GetTime(DS1302_TimeTypeDef* time)
     time->minute = DS1302_ConvertFromBcd(minute);
     time->second = DS1302_ConvertFromBcd(second);
     time->week   = DS1302_ConvertFromBcd(week);
+    Debug("DS1302 GetTime: %d/%02d/%02d %02d:%02d:%02d\r\n",
+          time->year, time->month, time->day, time->hour, time->minute, time->second);
 }
 
 void DS1302_StartClock(void)
@@ -172,4 +178,5 @@ void DS1302_StartClock(void)
     DS1302_WriteReg(0x8E, 0x00);
     DS1302_WriteReg(0x80, 0x00);
     DS1302_WriteReg(0x8E, 0x80);
+    Info("DS1302 Clock Started\r\n");
 }
