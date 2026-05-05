@@ -1,6 +1,14 @@
 """
-汉字点阵生成器 - 测试脚本
+汉字点阵生成器 - 列扫描格式（匹配OLED Page Addressing Mode + 0xC8 COM remap）
 将汉字转换为 OLED 可用的点阵数组，并可视化显示
+
+OLED 数据格式说明:
+- SSD1306 Page Addressing Mode，每页8行
+- 初始化使用 0xC8 (COM remap), 所以:
+  - bit0 = 该页顶部行
+  - bit7 = 该页底部行
+- 前16字节 = 页0 (行0-7), 每列1字节
+- 后16字节 = 页1 (行8-15), 每列1字节
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -9,38 +17,40 @@ import numpy as np
 
 def char_to_bitmap(char, font_path=None, size=16):
     """
-    将单个汉字转换为点阵
+    将单个汉字转换为OLED列扫描格式的点阵
+    
+    OLED Page Addressing Mode:
+    - 每个字节 = 1列的8垂直像素
+    - 字节0-15 = 列0-15的上半部（行0-7）
+    - 字节16-31 = 列0-15的下半部（行8-15）
+    - bit7 = 该页最上方像素
     
     Args:
-        char: 要转换的汉字，如 "温"
-        font_path: 字体文件路径，None 使用默认字体
+        char: 要转换的汉字
+        font_path: 字体文件路径
         size: 点阵大小（16x16）
     
     Returns:
-        点阵数据数组（32字节）
+        (bitmap_32bytes, pixels_16x16_array)
     """
-    # 创建空白图像（黑色背景）
     image = Image.new('1', (size, size), 0)
     draw = ImageDraw.Draw(image)
     
-    # 尝试加载字体
     font = None
     if font_path:
         try:
-            font = ImageFont.truetype(font_path, size - 2)  # 稍微小一点，避免溢出
+            font = ImageFont.truetype(font_path, size - 2)
         except Exception as e:
             print(f"  警告: 无法加载字体 {font_path}: {e}")
     
-    # 如果指定字体失败，尝试系统默认中文字体
     if font is None:
-        # 尝试常见的中文字体路径
         system_fonts = [
-            "C:/Windows/Fonts/simhei.ttf",      # Windows 黑体
-            "C:/Windows/Fonts/simsun.ttc",      # Windows 宋体
-            "C:/Windows/Fonts/msyh.ttc",        # Windows 微软雅黑
-            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux
+            "C:/Windows/Fonts/simhei.ttf",
+            "C:/Windows/Fonts/simsun.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
             "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-            "/System/Library/Fonts/PingFang.ttc",  # macOS
+            "/System/Library/Fonts/PingFang.ttc",
         ]
         for sys_font in system_fonts:
             try:
@@ -50,73 +60,58 @@ def char_to_bitmap(char, font_path=None, size=16):
             except:
                 continue
     
-    # 如果都失败了，使用默认字体
     if font is None:
         font = ImageFont.load_default()
         print("  警告: 使用默认字体，可能无法显示中文")
     
-    # 计算文字居中位置
     bbox = draw.textbbox((0, 0), char, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
     x = (size - text_width) // 2
     y = (size - text_height) // 2 - bbox[1]
     
-    # 绘制文字（白色）
     draw.text((x, y), char, fill=1, font=font)
     
-    # 转换为 numpy 数组
-    pixels = np.array(image, dtype=np.uint8)
+    pixels = np.array(image, dtype=np.uint8)  # pixels[row][col]
     
-    # 生成横向取模数据（每行2字节，16行，共32字节）
     bitmap = []
-    for row in pixels:
-        byte1 = 0
-        byte2 = 0
-        # 前8列 -> byte1
-        for i in range(8):
-            if row[i]:
-                byte1 |= (1 << (7 - i))
-        # 后8列 -> byte2
-        for i in range(8, 16):
-            if row[i]:
-                byte2 |= (1 << (15 - i))
-        bitmap.append(byte1)
-        bitmap.append(byte2)
+    
+    # 上半部（行0-7）：列0-15
+    # bit0=行0(顶)，bit7=行7(底) — 匹配OLED 0xC8 COM remap
+    for col in range(16):
+        byte_val = 0
+        for row in range(8):
+            if pixels[row][col]:
+                byte_val |= (1 << row)  # bit0=行0(顶)
+        bitmap.append(byte_val)
+    
+    # 下半部（行8-15）：列0-15
+    # bit0=行8(顶)，bit7=行15(底)
+    for col in range(16):
+        byte_val = 0
+        for row in range(8, 16):
+            if pixels[row][col]:
+                byte_val |= (1 << (row - 8))  # bit0=行8(顶)
+        bitmap.append(byte_val)
     
     return bitmap, pixels
 
 
 def print_bitmap_visual(bitmap, size=16):
-    """
-    在控制台可视化打印点阵
-    
-    Args:
-        bitmap: 32字节的点阵数据
-        size: 点阵大小
-    """
+    """在控制台可视化打印点阵"""
     print("  点阵预览 (█=亮,  =灭):")
+    print("  注意: bit0=行顶(顶), bit7=行底(底)")
     print("  +" + "-" * size + "+")
     
     for row in range(size):
         line = "  |"
-        byte1 = bitmap[row * 2]
-        byte2 = bitmap[row * 2 + 1]
-        
-        # 前8位
-        for bit in range(8):
-            if byte1 & (1 << (7 - bit)):
+        for col in range(size):
+            byte_idx = (col if row < 8 else col + 16)
+            shift = row if row < 8 else (row - 8)  # bit0=顶
+            if bitmap[byte_idx] & (1 << shift):
                 line += "█"
             else:
                 line += " "
-        
-        # 后8位
-        for bit in range(8):
-            if byte2 & (1 << (7 - bit)):
-                line += "█"
-            else:
-                line += " "
-        
         line += "|"
         print(line)
     
@@ -124,98 +119,80 @@ def print_bitmap_visual(bitmap, size=16):
 
 
 def format_c_array(name, bitmap):
-    """
-    格式化为 C 语言数组
-    
-    Args:
-        name: 数组名称
-        bitmap: 32字节的点阵数据
-    
-    Returns:
-        C 语言格式的字符串
-    """
+    """格式化为 C 语言数组"""
     lines = [f"const uint8_t {name}[] = {{"]
-    hex_values = []
-    for i, byte in enumerate(bitmap):
-        hex_values.append(f"0x{byte:02x}")
-    
-    # 每行8个值
+    hex_values = [f"0x{b:02x}" for b in bitmap]
     for i in range(0, len(hex_values), 8):
         row = ", ".join(hex_values[i:i+8])
         lines.append(f"    {row},")
-    
     lines.append("};")
     return "\n".join(lines)
 
 
 def test_single_char(char, font_path=None):
-    """
-    测试单个汉字
-    """
+    """测试单个汉字"""
     print(f"\n{'='*50}")
     print(f"生成汉字: [{char}]")
     print(f"{'='*50}")
     
-    # 生成点阵
     bitmap, pixels = char_to_bitmap(char, font_path)
     
-    # 显示可视化
     print_bitmap_visual(bitmap)
     
-    # 显示原始数据
-    print(f"\n  原始数据 (32字节):")
-    for i in range(0, 32, 8):
-        hex_str = " ".join([f"0x{b:02x}" for b in bitmap[i:i+8]])
-        print(f"    {hex_str}")
-    
-    # 生成 C 数组
     pinyin_map = {
         '温': 'Wen', '度': 'Du', '时': 'Shi', '间': 'Jian',
-        '定': 'Ding', '位': 'Wei', '体': 'Ti', '感': 'Gan',
-        '温': 'Wen', '湿': 'Shi', '度': 'Du', '年': 'Nian',
-        '月': 'Yue', '日': 'Ri', '时': 'Shi', '分': 'Fen',
-        '秒': 'Miao', '定': 'Ding', '位': 'Wei', '置': 'Zhi',
-        '状': 'Zhuang', '态': 'Tai', '网': 'Wang', '络': 'Luo',
+        '定': 'Ding', '位': 'Wei', '年': 'Nian', '月': 'Yue',
+        '日': 'Ri', '物': 'Wu', '环': 'Huan', '境': 'Jing',
+        '状': 'Zhuang', '态': 'Tai',
+        '连': 'Lian', '接': 'Jie', '中': 'Zhong',
+        '离': 'Li', '线': 'Xian', '在': 'Zai',
+        '有': 'You', '效': 'Xiao', '搜': 'Sou',
+        '索': 'Suo', '失': 'Shi2', '败': 'Bai',
+        '网': 'Wang', '络': 'Luo2',
+        '经': 'Jing2', '纬': 'Wei2',
     }
     name = pinyin_map.get(char, f"Char_{ord(char):04X}")
-    
-    print(f"\n  C 语言数组:")
+
     c_code = format_c_array(f"Chinese_{name}", bitmap)
+    print(f"\n  C 语言数组 (列扫描格式):")
     print(c_code)
     
     return bitmap, c_code
 
 
-def generate_font_library(chars, output_file=None):
-    """
-    批量生成字库
-    """
-    print(f"\n{'='*60}")
-    print(f"批量生成字库: {chars}")
-    print(f"{'='*60}")
-    
+def generate_font_c_file(chars, output_file=None):
+    """批量生成字库 .c 文件"""
     results = []
     for char in chars:
-        bitmap, c_code = test_single_char(char)
-        results.append((char, c_code))
+        bitmap, _ = test_single_char(char)
+        results.append((char, bitmap))
     
-    # 保存到文件
     if output_file:
+        pinyin_map = {
+            '温': 'Wen', '度': 'Du', '时': 'Shi', '间': 'Jian',
+            '定': 'Ding', '位': 'Wei', '年': 'Nian', '月': 'Yue',
+            '日': 'Ri', '物': 'Wu', '环': 'Huan', '境': 'Jing',
+            '状': 'Zhuang', '态': 'Tai',
+            '连': 'Lian', '接': 'Jie', '中': 'Zhong',
+            '离': 'Li', '线': 'Xian', '在': 'Zai',
+            '有': 'You', '效': 'Xiao', '搜': 'Sou',
+            '索': 'Suo', '失': 'Shi2', '败': 'Bai',
+            '网': 'Wang', '络': 'Luo2',
+            '经': 'Jing2', '纬': 'Wei2',
+        }
+        
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write("/**\n")
-            f.write(" * 中文点阵字库 - 16x16\n")
-            f.write(" * 自动生成，横向取模\n")
-            f.write(" */\n\n")
-            f.write("#ifndef __CHINESE_FONT_H\n")
-            f.write("#define __CHINESE_FONT_H\n\n")
-            f.write("#include <stdint.h>\n\n")
+            f.write('/**\n')
+            f.write(' * 中文点阵字库 - 16x16 列扫描格式\n')
+            f.write(' * 匹配 OLED Page Addressing Mode\n')
+            f.write(' */\n\n')
+            f.write('#include "chinese_font.h"\n\n')
             
-            for char, c_code in results:
-                f.write(f"// 汉字: {char}\n")
-                f.write(c_code)
-                f.write("\n\n")
-            
-            f.write("#endif /* __CHINESE_FONT_H */\n")
+            for char, bitmap in results:
+                name = pinyin_map.get(char, f"Char_{ord(char):04X}")
+                f.write(f'// 汉字: {char}\n')
+                f.write(format_c_array(f"Chinese_{name}", bitmap))
+                f.write('\n\n')
         
         print(f"\n{'='*60}")
         print(f"字库已保存到: {output_file}")
@@ -225,34 +202,31 @@ def generate_font_library(chars, output_file=None):
 # ============ 主程序 ============
 if __name__ == "__main__":
     print("="*60)
-    print("  汉字点阵生成器 - 测试程序")
+    print("  汉字点阵生成器 - 列扫描格式")
     print("="*60)
-    print("\n本程序将汉字转换为 OLED 16x16 点阵数组")
-    print("支持可视化预览和 C 语言代码生成")
+    print("\n生成列扫描格式，匹配 OLED Page Addressing Mode")
+    print("每字节 = 1列8垂直像素，bit7=顶")
     
-    # 测试单个汉字
     test_chars = [
-        "温",  # 温度
-        "度",
-        "时",  # 时间
-        "间",
-        "定",  # 定位
-        "位",
+        "温", "度", "时", "间", "定", "位",
+        "年", "月", "日", "物", "环", "境",
+        "状", "态",
+        "连", "接", "中", "离", "线", "在",
+        "有", "效", "搜", "索", "失", "败",
+        "网", "络",
+        "经", "纬",
     ]
     
-    print("\n\n准备测试以下汉字:")
-    for i, c in enumerate(test_chars, 1):
-        print(f"  {i}. {c}")
+    print(f"\n准备测试以下汉字: {''.join(test_chars)}")
     
-    # 执行测试
     for char in test_chars:
         test_single_char(char)
     
-    # 批量生成字库文件
-    generate_font_library("温度时间定位", "chinese_font.h")
+    # 生成 chinese_font.c
+    generate_font_c_file(test_chars, "chinese_font.c")
     
     print("\n\n" + "="*60)
     print("  测试完成!")
     print("="*60)
-    print("\n生成的字库文件: chinese_font.h")
-    print("可将该文件复制到 STM32 项目中使用")
+    print("\n生成的文件: chinese_font.c (列扫描格式)")
+    print("将该文件复制到 STM32 项目 Hardware 目录")

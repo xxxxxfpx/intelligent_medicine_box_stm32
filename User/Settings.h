@@ -40,6 +40,7 @@
 /*======================== ESP8266 配置 ========================*/
 #define ESP8266_UART_BAUD 115200
 #define ESP8266_TIMEOUT   20000  // WiFi连接超时时间(ms)
+#define WIFI_RETRY_INTERVAL_MS 1000  // WiFi重试间隔(ms)
 
 /*======================== DS1302 配置 ========================*/
 #define DS1302_DEFAULT_YEAR    26

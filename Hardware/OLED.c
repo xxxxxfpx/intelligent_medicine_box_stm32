@@ -1,5 +1,6 @@
 #include "stm32f10x.h"
 #include "OLED_Font.h"
+#include "chinese_font.h"
 
 /*引脚配置*/
 #define OLED_W_SCL(x)		GPIO_WriteBit(GPIOB, GPIO_Pin_8, (BitAction)(x))
@@ -317,6 +318,30 @@ void OLED_Init(void)
 	OLED_WriteCommand(0x14);
 
 	OLED_WriteCommand(0xAF);	//开启显示
-		
+	
 	OLED_Clear();				//OLED清屏
+}
+
+/**
+  * @brief  OLED显示16x16汉字
+  * @param  Line 起始行位置，范围：1~4
+  * @param  Column 起始列位置，范围：1~8（每个汉字占2个英文字符宽度）
+  * @param  Chinese 汉字点阵数组，32字节
+  * @retval 无
+  */
+void OLED_ShowChinese16x16(uint8_t Line, uint8_t Column, const uint8_t *Chinese)
+{
+	uint8_t i;
+	// 上半部分（8行）
+	OLED_SetCursor((Line - 1) * 2, (Column - 1) * 16);
+	for (i = 0; i < 16; i++)
+	{
+		OLED_WriteData(Chinese[i]);
+	}
+	// 下半部分（8行）
+	OLED_SetCursor((Line - 1) * 2 + 1, (Column - 1) * 16);
+	for (i = 16; i < 32; i++)
+	{
+		OLED_WriteData(Chinese[i]);
+	}
 }

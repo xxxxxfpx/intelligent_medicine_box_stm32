@@ -11,6 +11,7 @@
 #include "stm32f10x.h"
 #include "Delay.h"
 #include "OLED.h"
+#include "chinese_font.h"
 #include "DS1302.h"
 #include "GPS.h"
 #include "MLX90614.h"
@@ -154,9 +155,9 @@ int main_ok(void)
     static uint32_t lastPublishTime = 0;
     float ambientTemp, objectTemp;
     GPS_InfoTypeDef *gpsInfo;
-    float latDecimal = 39.9042f, lonDecimal = 116.4074f;
+    float latDecimal = 0.0f, lonDecimal = 0.0f;
     uint8_t hasGpsFix = 0;
-    
+
     Delay_Reset();
 
     OLED_Init();
@@ -177,20 +178,16 @@ int main_ok(void)
     
     ESP8266_Init();
     
-    OLED_ShowString(3, 1, "Checking WiFi..");
-    if(ESP8266_GetIP(ipStr))
-    {
-        OLED_ShowString(3, 1, "WiFi:Connected ");
-        OLED_ShowString(4, 1, "IP:            ");
-        OLED_ShowString(4, 5, ipStr);
-        Info("WiFi Connected, IP: %s\r\n", ipStr);
-    }
-    else
+    while(!ESP8266_GetIP(ipStr))
     {
         OLED_ShowString(3, 1, "WiFi:No IP     ");
-        Error("WiFi No IP\r\n");
-        while(1) { Delay_ms(1000); }
+        Error("WiFi No IP, retrying...\r\n");
+        Delay_ms(WIFI_RETRY_INTERVAL_MS);
     }
+    OLED_ShowString(3, 1, "WiFi:Connected ");
+    OLED_ShowString(4, 1, "IP:            ");
+    OLED_ShowString(4, 5, ipStr);
+    Info("WiFi Connected, IP: %s\r\n", ipStr);
     Delay_ms(1000);
     
     OLED_ShowString(1, 1, "MQTT Config... ");
@@ -283,11 +280,14 @@ int main(void)
     char ipStr[20];
     static uint32_t lastPublishTime = 0;
     static uint32_t lastPageSwitchTime = 0;
+    static uint32_t lastTimeUpdate = 0;
     static uint8_t currentPage = 0;
+    static uint8_t displayedPage = 0;
     float ambientTemp, objectTemp;
     GPS_InfoTypeDef *gpsInfo;
-    float latDecimal = 39.9042f, lonDecimal = 116.4074f;
+    float latDecimal = 0.0f, lonDecimal = 0.0f;
     uint8_t hasGpsFix = 0;
+    static uint8_t wifiState = 0;
     DS1302_TimeTypeDef currentTime;
 
     Delay_Reset();
@@ -310,20 +310,16 @@ int main(void)
 
     ESP8266_Init();
 
-    OLED_ShowString(3, 1, "Checking WiFi..");
-    if(ESP8266_GetIP(ipStr))
-    {
-        OLED_ShowString(3, 1, "WiFi:Connected ");
-        OLED_ShowString(4, 1, "IP:            ");
-        OLED_ShowString(4, 5, ipStr);
-        Info("WiFi Connected, IP: %s\r\n", ipStr);
-    }
-    else
+    while(!ESP8266_GetIP(ipStr))
     {
         OLED_ShowString(3, 1, "WiFi:No IP     ");
-        Error("WiFi No IP\r\n");
-        while(1) { Delay_ms(1000); }
+        Error("WiFi No IP, retrying...\r\n");
+        Delay_ms(WIFI_RETRY_INTERVAL_MS);
     }
+    OLED_ShowString(3, 1, "WiFi:Connected ");
+    OLED_ShowString(4, 1, "IP:            ");
+    OLED_ShowString(4, 5, ipStr);
+    Info("WiFi Connected, IP: %s\r\n", ipStr);
     Delay_ms(1000);
 
     OLED_ShowString(1, 1, "MQTT Config... ");
@@ -351,6 +347,7 @@ int main(void)
         {
             OLED_ShowString(2, 1, "MQTT:Connected!");
             Info("MQTT Connected, start publishing\r\n");
+            wifiState = 1;
         }
     }
 
@@ -390,8 +387,12 @@ int main(void)
                     Delay_ms(200);
                     ESP8266_MQTT_PublishAmbientTemp(ambientTemp);
                     Delay_ms(200);
-                    ESP8266_MQTT_PublishGPS(latDecimal, lonDecimal);
-                    Delay_ms(200);
+                    /* GPS有效时才提交位置 */
+                    if(hasGpsFix)
+                    {
+                        ESP8266_MQTT_PublishGPS(latDecimal, lonDecimal);
+                        Delay_ms(200);
+                    }
                     ESP8266_MQTT_PublishPillboxStatus("normal");
                 }
                 else
@@ -403,6 +404,7 @@ int main(void)
         else
         {
             Error("MQTT Disconnected!\r\n");
+            wifiState = 2;
             Delay_ms(1000);
         }
 
@@ -411,96 +413,153 @@ int main(void)
         {
             lastPageSwitchTime = Delay_GetTime();
             DS1302_GetTime(&currentTime);
+
+            /* 将objectTemp和ambientTemp更新为最新值 */
+            objectTemp = MLX90614_ReadObjectTemp();
+            ambientTemp = MLX90614_ReadAmbientTemp();
+
             OLED_Clear();
 
             switch(currentPage)
             {
-                case 0:  /* 页面1: 时间日期 */
-                    OLED_ShowString(1, 1, "Time: ");
-                    OLED_ShowNum(1, 7, currentTime.hour, 2);
-                    OLED_ShowChar(1, 9, ':');
-                    OLED_ShowNum(1, 10, currentTime.minute, 2);
-                    OLED_ShowChar(1, 12, ':');
-                    OLED_ShowNum(1, 13, currentTime.second, 2);
+                case 0:  /* 页面1: 年月+时间+温度 */
+                    /* 第1行: "年月:YY/MM/DD" */
+                    OLED_ShowChinese16x16(1, 1, Chinese_Nian);
+                    OLED_ShowChinese16x16(1, 3, Chinese_Yue);
+                    OLED_ShowChar(1, 7, ':');
+                    OLED_ShowNum(1, 8, currentTime.year, 2);
+                    OLED_ShowChar(1, 10, '/');
+                    OLED_ShowNum(1, 11, currentTime.month, 2);
+                    OLED_ShowChar(1, 13, '/');
+                    OLED_ShowNum(1, 14, currentTime.day, 2);
 
-                    OLED_ShowString(2, 1, "Date: 20");
-                    OLED_ShowNum(2, 9, currentTime.year, 2);
-                    OLED_ShowChar(2, 11, '/');
-                    OLED_ShowNum(2, 12, currentTime.month, 2);
-                    OLED_ShowChar(2, 14, '/');
-                    OLED_ShowNum(2, 15, currentTime.day, 2);
+                    /* 第2行: "时间:HH:MM:SS" */
+                    OLED_ShowChinese16x16(2, 1, Chinese_Shi);
+                    OLED_ShowChinese16x16(2, 3, Chinese_Jian);
+                    OLED_ShowChar(2, 7, ':');
+                    OLED_ShowNum(2, 8, currentTime.hour, 2);
+                    OLED_ShowChar(2, 10, ':');
+                    OLED_ShowNum(2, 11, currentTime.minute, 2);
+                    OLED_ShowChar(2, 13, ':');
+                    OLED_ShowNum(2, 14, currentTime.second, 2);
 
-                    OLED_ShowString(3, 1, "Week: ");
-                    OLED_ShowNum(3, 7, currentTime.week, 1);
+                    /* 第3行: "物温:XX.XC" */
+                    OLED_ShowChinese16x16(3, 1, Chinese_Wu);
+                    OLED_ShowChinese16x16(3, 3, Chinese_Wen);
+                    OLED_ShowChar(3, 7, ':');
+                    if(objectTemp >= 0)
+                    {
+                        OLED_ShowNum(3, 8, (int32_t)objectTemp, 2);
+                    }
+                    else
+                    {
+                        OLED_ShowChar(3, 8, '-');
+                        OLED_ShowNum(3, 9, (int32_t)(-objectTemp), 2);
+                    }
+                    OLED_ShowChar(3, 12, '.');
+                    OLED_ShowNum(3, 13, (int32_t)(objectTemp * 10) % 10, 1);
+                    OLED_ShowChar(3, 14, 'C');
 
-                    OLED_ShowString(4, 1, "Smart Pillbox");
+                    /* 第4行: "环境:XX.XC" */
+                    OLED_ShowChinese16x16(4, 1, Chinese_Huan);
+                    OLED_ShowChinese16x16(4, 3, Chinese_Jing);
+                    OLED_ShowChar(4, 7, ':');
+                    if(ambientTemp >= 0)
+                    {
+                        OLED_ShowNum(4, 8, (int32_t)ambientTemp, 2);
+                    }
+                    else
+                    {
+                        OLED_ShowChar(4, 8, '-');
+                        OLED_ShowNum(4, 9, (int32_t)(-ambientTemp), 2);
+                    }
+                    OLED_ShowChar(4, 12, '.');
+                    OLED_ShowNum(4, 13, (int32_t)(ambientTemp * 10) % 10, 1);
+                    OLED_ShowChar(4, 14, 'C');
                     break;
 
-                case 1:  /* 页面2: 温度和网络状态 */
-                    objectTemp = MLX90614_ReadObjectTemp();
-                    ambientTemp = MLX90614_ReadAmbientTemp();
+                case 1:  /* 页面2: 网络+定位+经纬度 */
+                    /* 第1行: "网络:{status}" */
+                    OLED_ShowChinese16x16(1, 1, Chinese_Wang);
+                    OLED_ShowChinese16x16(1, 3, Chinese_Luo2);
+                    OLED_ShowChar(1, 7, ':');
+                    if(wifiState == 1)
+                    {
+                        OLED_ShowChinese16x16(1, 5, Chinese_Zai);
+                        OLED_ShowChinese16x16(1, 6, Chinese_Xian);
+                    }
+                    else if(wifiState == 2)
+                    {
+                        OLED_ShowChinese16x16(1, 5, Chinese_Li);
+                        OLED_ShowChinese16x16(1, 6, Chinese_Xian);
+                    }
+                    else
+                    {
+                        OLED_ShowChinese16x16(1, 5, Chinese_Lian);
+                        OLED_ShowChinese16x16(1, 6, Chinese_Jie);
+                        OLED_ShowChinese16x16(1, 7, Chinese_Zhong);
+                    }
 
-                    OLED_ShowString(1, 1, "Obj: ");
-                    OLED_ShowSignedNum(1, 6, (int32_t)objectTemp, 2);
-                    OLED_ShowChar(1, 9, '.');
-                    OLED_ShowNum(1, 10, (int32_t)(objectTemp * 10) % 10, 1);
-                    OLED_ShowChar(1, 11, 'C');
-
-                    OLED_ShowString(2, 1, "Amb: ");
-                    OLED_ShowSignedNum(2, 6, (int32_t)ambientTemp, 2);
-                    OLED_ShowChar(2, 9, '.');
-                    OLED_ShowNum(2, 10, (int32_t)(ambientTemp * 10) % 10, 1);
-                    OLED_ShowChar(2, 11, 'C');
-
+                    /* 第2行: "定位:{status}" */
+                    OLED_ShowChinese16x16(2, 1, Chinese_Ding);
+                    OLED_ShowChinese16x16(2, 3, Chinese_Wei);
+                    OLED_ShowChar(2, 7, ':');
                     gpsInfo = GPS_GetInfo();
                     if(gpsInfo->isValid)
                     {
-                        OLED_ShowString(3, 1, "GPS: OK     ");
-                    }
-                    else if(gpsInfo->frameCount > 0)
-                    {
-                        OLED_ShowString(3, 1, "GPS: No Fix ");
+                        OLED_ShowChinese16x16(2, 5, Chinese_You);
+                        OLED_ShowChinese16x16(2, 6, Chinese_Xiao);
                     }
                     else
                     {
-                        OLED_ShowString(3, 1, "GPS: No Data");
+                        OLED_ShowChinese16x16(2, 5, Chinese_Sou);
+                        OLED_ShowChinese16x16(2, 6, Chinese_Suo);
+                        OLED_ShowChinese16x16(2, 7, Chinese_Zhong);
                     }
 
-                    if(ESP8266_MQTT_IsConnected())
-                    {
-                        OLED_ShowString(4, 1, "WiFi: Online ");
-                    }
-                    else
-                    {
-                        OLED_ShowString(4, 1, "WiFi: Offline");
-                    }
-                    break;
-
-                case 2:  /* 页面3: GPS定位 */
-                    gpsInfo = GPS_GetInfo();
+                    /* 第3行: 经度 (GPS有效时显示) */
                     if(gpsInfo->isValid)
                     {
-                        OLED_ShowString(1, 1, "GPS: Valid   ");
-
-                        OLED_ShowString(2, 1, "Lat: ");
-                        OLED_ShowString(2, 6, gpsInfo->latitude);
-
-                        OLED_ShowString(3, 1, "Lon: ");
-                        OLED_ShowString(3, 6, gpsInfo->longitude);
+                        OLED_ShowChinese16x16(3, 1, Chinese_Jing2);
+                        OLED_ShowChinese16x16(3, 3, Chinese_Du);
+                        OLED_ShowChar(3, 7, ':');
+                        OLED_ShowString(3, 8, gpsInfo->longitude);
                     }
                     else
                     {
-                        OLED_ShowString(1, 1, "GPS: No Fix  ");
+                        OLED_ShowString(3, 1, "                ");
+                    }
 
-                        OLED_ShowString(2, 1, "Default Coord:");
-
-                        OLED_ShowString(3, 1, "Lat: 39.9042");
-                        OLED_ShowString(4, 1, "Lon: 116.4074");
+                    /* 第4行: 纬度 (GPS有效时显示) */
+                    if(gpsInfo->isValid)
+                    {
+                        OLED_ShowChinese16x16(4, 1, Chinese_Wei2);
+                        OLED_ShowChinese16x16(4, 3, Chinese_Du);
+                        OLED_ShowChar(4, 7, ':');
+                        OLED_ShowString(4, 8, gpsInfo->latitude);
+                    }
+                    else
+                    {
+                        OLED_ShowString(4, 1, "                ");
                     }
                     break;
             }
 
-            currentPage = (currentPage + 1) % 3;  /* 循环切换3页面 */
+            displayedPage = currentPage;
+            currentPage = (currentPage + 1) % 2;  /* 循环切换2页面 */
+        }
+
+        /* 页面0实时刷新时间（每1秒更新） */
+        if(displayedPage == 0 && (Delay_GetTime() - lastTimeUpdate) >= 1000)
+        {
+            lastTimeUpdate = Delay_GetTime();
+            DS1302_GetTime(&currentTime);
+
+            OLED_ShowNum(2, 8, currentTime.hour, 2);
+            OLED_ShowChar(2, 10, ':');
+            OLED_ShowNum(2, 11, currentTime.minute, 2);
+            OLED_ShowChar(2, 13, ':');
+            OLED_ShowNum(2, 14, currentTime.second, 2);
         }
 
         Delay_ms(100);

@@ -240,11 +240,13 @@ uint8_t ESP8266_GetIP(char *ip)
 
     ESP8266_Clear();
     ESP8266_SendCmd("AT+CIFSR\r\n");
-    if (!ESP8266_WaitResponse("OK", 2000))
+    if (!ESP8266_WaitResponse("OK", 200))
     {
+        Debug("GetIP: No OK response, buffer=%s\r\n", esp8266.buffer);
         return 0;
     }
 
+    Debug("GetIP: raw=%s\r\n", esp8266.buffer);
     start = strstr(esp8266.buffer, "STAIP,\"");
     if (start == NULL)
     {
