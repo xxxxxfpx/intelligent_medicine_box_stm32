@@ -7,10 +7,14 @@
 
 #include "ESP8266.h"
 #include "Delay.h"
+#include "GPS.h"
+#include "MLX90614.h"
 #include "OLED.h"
 #include "Settings.h"
 #include "USART1.h"
+#include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static ESP8266_TypeDef esp8266;
 
@@ -75,14 +79,9 @@ void ESP8266_SendCmd(const char *cmd)
 uint8_t ESP8266_WaitResponse(const char *response, uint32_t timeout)
 {
     uint32_t startTime = 0;
-    uint16_t lastLen = 0;
 
     while (startTime < timeout)
     {
-        if (esp8266.rxIndex > lastLen)
-        {
-            lastLen = esp8266.rxIndex;
-        }
         if (strstr(esp8266.buffer, response) != NULL)
         {
             return 1;
@@ -535,6 +534,291 @@ uint8_t ESP8266_MQTT_PublishPillboxStatus(const char *status)
     }
     Error("Commit Pillbox: %s FAIL\r\n", status);
     return 0;
+}
+
+uint8_t ESP8266_MQTT_HasPendingMessage(void)
+{
+    return (strstr(esp8266.buffer, "+MQTTSUBRECV:") != NULL) ? 1 : 0;
+}
+
+uint16_t ESP8266_MQTT_ParseMessage(char *payloadBuf, uint16_t bufSize)
+{
+    char *recv;
+    char *p;
+    uint16_t len;
+
+    recv = strstr(esp8266.buffer, "+MQTTSUBRECV:");
+    if(!recv) return 0;
+
+    p = strchr(recv, ',');
+    if(!p) return 0;
+    p = strchr(p + 1, ',');
+    if(!p) return 0;
+    p = strchr(p + 1, ',');
+    if(!p) return 0;
+    p++;
+
+    len = strlen(p);
+    while(len > 0 && (p[len-1] == '\r' || p[len-1] == '\n' || p[len-1] == ' '))
+        len--;
+
+    if(len >= bufSize) len = bufSize - 1;
+    memcpy(payloadBuf, p, len);
+    payloadBuf[len] = '\0';
+
+    return len;
+}
+
+static void MQTT_SendFloatReply(const char *property, float value)
+{
+    char cmd[512];
+    char data[120];
+
+    snprintf(data, sizeof(data),
+        "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":%.2f}}}",
+        property, value);
+    Info("  Reply: %s = %.2f\r\n", property, value);
+
+    snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/post\",\"%s\",0,0\r\n",
+        MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+    ESP8266_SendCmd(cmd);
+    ESP8266_WaitResponse("OK", 3000);
+}
+
+static void MQTT_SendStringReply(const char *property, const char *value)
+{
+    char cmd[512];
+    char data[120];
+
+    snprintf(data, sizeof(data),
+        "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":\\\"%s\\\"}}}",
+        property, value);
+    Info("  Reply: %s = %s\r\n", property, value);
+
+    snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/post\",\"%s\",0,0\r\n",
+        MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+    ESP8266_SendCmd(cmd);
+    ESP8266_WaitResponse("OK", 3000);
+}
+
+static void MQTT_SendIntReply(const char *property, int32_t value)
+{
+    char cmd[512];
+    char data[120];
+
+    snprintf(data, sizeof(data),
+        "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":%ld}}}",
+        property, (long)value);
+    Info("  Reply: %s = %ld\r\n", property, (long)value);
+
+    snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/post\",\"%s\",0,0\r\n",
+        MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+    ESP8266_SendCmd(cmd);
+    ESP8266_WaitResponse("OK", 3000);
+}
+
+static void MQTT_SendEnumReply(const char *property, int value)
+{
+    char cmd[512];
+    char data[120];
+
+    snprintf(data, sizeof(data),
+        "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":%d}}}",
+        property, value);
+    Info("  Reply: %s = %d\r\n", property, value);
+
+    snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/post\",\"%s\",0,0\r\n",
+        MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+    ESP8266_SendCmd(cmd);
+    ESP8266_WaitResponse("OK", 3000);
+}
+
+static void MQTT_SendPropertySetReply(const char *id, uint8_t code, const char *msg)
+{
+    char cmd[256];
+    char data[128];
+
+    if(id == NULL) id = "123";
+    if(msg == NULL) msg = "success";
+
+    snprintf(data, sizeof(data),
+        "{\\\"id\\\":\\\"%s\\\"\\,\\\"code\\\":%d\\,\\\"msg\\\":\\\"%s\\\"}",
+        id, code, msg);
+    Info("  Property Set Reply: %s\r\n", data);
+
+    ESP8266_Clear();
+    snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/set_reply\",\"%s\",0,0\r\n",
+        MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+    Debug("  CMD: %s\r\n", cmd);
+    ESP8266_SendCmd(cmd);
+    if(ESP8266_WaitResponse("OK", 3000))
+    {
+        Debug("  MQTT Publish OK\r\n");
+    }
+    else
+    {
+        Error("  MQTT Publish FAIL, rxBuf: %s\r\n", esp8266.buffer);
+    }
+}
+
+uint8_t ESP8266_MQTT_HandleDownlink(void)
+{
+    char payload[256];
+    char propName[64];
+    char msgId[32] = "123";
+    char *params;
+    char *obj;
+    char *propStart;
+    char *propEnd;
+    char *idPtr;
+    char *idStart;
+    char *idEnd;
+    uint16_t len;
+    uint16_t propLen;
+    uint16_t idLen;
+    GPS_InfoTypeDef *gpsInfo;
+    char cmd[512];
+    char data[120];
+
+    if(!ESP8266_MQTT_HasPendingMessage()) return 0;
+
+    len = ESP8266_MQTT_ParseMessage(payload, sizeof(payload));
+    if(len == 0)
+    {
+        ESP8266_Clear();
+        return 0;
+    }
+
+    Info("[Downlink] Received: %s\r\n", payload);
+
+    idPtr = strstr(payload, "\"id\"");
+    if(idPtr)
+    {
+        idStart = strchr(idPtr, ':');
+        if(idStart)
+        {
+            idStart++;
+            while(*idStart == ' ' || *idStart == '"') idStart++;
+            idEnd = strchr(idStart, '"');
+            if(idEnd)
+            {
+                idLen = idEnd - idStart;
+                if(idLen < sizeof(msgId))
+                {
+                    memcpy(msgId, idStart, idLen);
+                    msgId[idLen] = '\0';
+                    Info("  MsgID: %s\r\n", msgId);
+                }
+            }
+        }
+    }
+
+    params = strstr(payload, "\"params\"");
+    if(!params)
+    {
+        MQTT_SendPropertySetReply(msgId, 100, "params missing");
+        ESP8266_Clear();
+        return 1;
+    }
+
+    obj = strchr(params + 8, '{');
+    if(!obj)
+    {
+        MQTT_SendPropertySetReply(msgId, 100, "invalid format");
+        ESP8266_Clear();
+        return 1;
+    }
+
+    while(*obj != '\0')
+    {
+        propStart = strchr(obj, '"');
+        if(!propStart) break;
+        propStart++;
+
+        propEnd = strchr(propStart, '"');
+        if(!propEnd) break;
+        propLen = propEnd - propStart;
+        if(propLen >= sizeof(propName)) propLen = sizeof(propName) - 1;
+        memcpy(propName, propStart, propLen);
+        propName[propLen] = '\0';
+
+        obj = propEnd + 1;
+        while(*obj == ':' || *obj == ' ' || *obj == '{' || *obj == '"' || *obj == '}' || *obj == ',')
+            obj++;
+
+        Info("  Property: %s\r\n", propName);
+
+        if(strcmp(propName, "temperature") == 0)
+        {
+            float objTemp = MLX90614_ReadObjectTemp();
+            MQTT_SendFloatReply("temperature", objTemp);
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "ambient_temperature") == 0)
+        {
+            float ambTemp = MLX90614_ReadAmbientTemp();
+            MQTT_SendFloatReply("ambient_temperature", ambTemp);
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "latitude") == 0 || strcmp(propName, "longitude") == 0)
+        {
+            gpsInfo = GPS_GetInfo();
+            if(gpsInfo && gpsInfo->isValid)
+            {
+                char *gpsVal = (strcmp(propName, "latitude") == 0) ? gpsInfo->latitude : gpsInfo->longitude;
+                snprintf(data, sizeof(data),
+                    "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"%s\\\":{\\\"value\\\":\\\"%s\\\"}}}",
+                    propName, gpsVal);
+                snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/post\",\"%s\",0,0\r\n",
+                    MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
+                ESP8266_SendCmd(cmd);
+                ESP8266_WaitResponse("OK", 3000);
+            }
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "CellNumber") == 0)
+        {
+            MQTT_SendIntReply("CellNumber", 6);
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "PillRemain") == 0)
+        {
+            Info("  [Set] PillRemain\r\n");
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "BatteryStatus") == 0)
+        {
+            MQTT_SendEnumReply("BatteryStatus", 1);
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "TakePillState") == 0)
+        {
+            MQTT_SendEnumReply("TakePillState", 0);
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "pillbox_status") == 0)
+        {
+            MQTT_SendStringReply("pillbox_status", "normal");
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else
+        {
+            Info("  [WARN] Unknown property: %s\r\n", propName);
+            MQTT_SendPropertySetReply(msgId, 100, "property not found");
+            break;
+        }
+    }
+
+    ESP8266_Clear();
+    return 1;
 }
 
 void USART3_IRQHandler(void)

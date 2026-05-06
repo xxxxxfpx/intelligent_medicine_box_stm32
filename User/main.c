@@ -354,8 +354,20 @@ int main(void)
     Delay_ms(1000);
     OLED_ShowString(4, 1, "Start Publish..");
 
+    Info("MQTT Connected, start subscribing downlink topic\r\n");
+    if(ESP8266_MQTT_Subscribe(MQTT_TOPIC_PROP_SET))
+    {
+        Info("Downlink Subscribe OK\r\n");
+    }
+    else
+    {
+        Error("Downlink Subscribe FAIL\r\n");
+    }
+
     while(1)
     {
+        ESP8266_MQTT_HandleDownlink();
+
         if(ESP8266_MQTT_IsConnected())
         {
             if(lastPublishTime == 0 || (Delay_GetTime() - lastPublishTime) > 5000)

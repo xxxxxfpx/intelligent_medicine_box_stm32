@@ -10,7 +10,7 @@
 
 #include "stm32f10x.h"
 
-#define ESP8266_BUFFER_SIZE  512
+#define ESP8266_BUFFER_SIZE  1024
 
 typedef struct {
     char buffer[ESP8266_BUFFER_SIZE];
@@ -43,5 +43,29 @@ uint8_t ESP8266_MQTT_PublishTemperature(float temperature);
 uint8_t ESP8266_MQTT_PublishAmbientTemp(float ambient_temp);
 uint8_t ESP8266_MQTT_PublishGPS(float latitude, float longitude);
 uint8_t ESP8266_MQTT_PublishPillboxStatus(const char *status);
+
+/**
+ * Check if there is a new MQTT subscription message from the broker
+ * Scans esp8266.buffer for "+MQTTSUBRECV:" prefix
+ * Returns: 1 if message detected, 0 otherwise
+ */
+uint8_t ESP8266_MQTT_HasPendingMessage(void);
+
+/**
+ * Parse the last received MQTT subscription message from esp8266.buffer
+ * Extracts payload content (JSON string after the 3rd comma)
+ * payloadBuf: output buffer to store the parsed payload
+ * bufSize: size of payloadBuf
+ * Returns: length of parsed payload, 0 if parse failed
+ */
+uint16_t ESP8266_MQTT_ParseMessage(char *payloadBuf, uint16_t bufSize);
+
+/**
+ * Handle MQTT downlink messages from OneNET (property set commands)
+ * Must be called in main loop. Detects +MQTTSUBRECV:, parses JSON,
+ * responds to set commands and reports current values.
+ * Returns: 1 if a downlink message was handled, 0 if none pending
+ */
+uint8_t ESP8266_MQTT_HandleDownlink(void);
 
 #endif
