@@ -1,0 +1,34 @@
+GET https://open.iot.10086.cn/apidebug/thingmodel/query-device-property?product_id=y8PjkMrwSb&device_name=BOX HTTP/1.1
+Host: open.iot.10086.cn
+Connection: keep-alive
+sec-ch-ua-platform: "Windows"
+authorization: version=2022-05-01&res=userid%2F512557&et=1777991480&method=sha1&sign=IUNxiA%2B3LEsoLAtIMlhn4eH3ano%3D
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36
+Accept: application/json, text/plain, */*
+sec-ch-ua: "Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-mobile: ?0
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: https://open.iot.10086.cn/console/monitor/apiDebug
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: zh-CN,zh;q=0.9
+Cookie: Hm_lvt_fb3a66a8ee8dcd5e16c7cae035393beb=1776763046,1776789917,1776962703; Hm_lvt_a194b5203b5d1a922c2eab73b7756f93=1776762794,1776789925,1776962706,1777786382; HMACCOUNT=E38C2BC1DC9661C5; Hm_lvt_fb3a66a8ee8dcd5e16c7cae035393beb=1776763967,1776789944,1777052145,1777786383; LANG=zh_CN; portal_token=512557--syyWqiKW5leMkgf16radaoptdzi8pz8n--1777989493-1777960693-c4e7cbc2d46ee2f751161b4064518601; session=512557--syyWqiKW5leMkgf16radaoptdzi8pz8n--1777989493-1777960693-c4e7cbc2d46ee2f751161b4064518601; Hm_lpvt_fb3a66a8ee8dcd5e16c7cae035393beb=1777965048; Hm_lpvt_a194b5203b5d1a922c2eab73b7756f93=1777965075; cmccIot=fa67a931c9cff852ff3fe747050de99d; SECKEY_ABVK=sffIE+eDnF/rzCKRPd6s8WozVPVgcqyyDBfCsmQQq1k%3D; BMAP_SECKEY=Ws_HxH1QTB72nnenhwlQ7Th7lulB9SPsJKSX5IV8CK5EsIPd09CfGC0qcqWl3gDMZRuVfnPjZ7dcqiqg6LcCT7aH8K06n0_Te2m3tx1eGpQnvKJo728QCbQS8yI8hpXzKdRN19_VG8iTVsCR5_QvKD8nyeM7YtHnjh8dKgccuc43O4G23w-zXJxkfyK_BhcP; Hm_lpvt_fb3a66a8ee8dcd5e16c7cae035393beb=1777987878
+
+
+HTTP/1.1 200 OK
+Server: openresty
+Date: Tue, 05 May 2026 13:34:50 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 1072
+Connection: keep-alive
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Headers: DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Referer,Accept,Range,Authorization,authorization
+Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS
+Access-Control-Allow-Origin: *
+Pragma: no-cache
+Expires: Tue, 05 May 2026 13:34:49 GMT
+Cache-Control: no-cache
+Strict-Transport-Security: max-age=2592000
+
+{"code":0,"data":[{"identifier":"BatteryStatus","data_type":"enum","access_mode":"只读","name":"电池状态"},{"identifier":"CellNumber","data_type":"int32","access_mode":"读写","name":"药盒格数"},{"identifier":"PillRemain","data_type":"int32","access_mode":"读写","name":"剩余药量"},{"identifier":"TakePillState","data_type":"enum","access_mode":"读写","name":"服药状态"},{"identifier":"ambient_temperature","time":1777987754367,"value":"26.73","data_type":"float","access_mode":"读写","name":"环境温度"},{"identifier":"latitude","time":1777903740503,"value":"27.766245","data_type":"float","access_mode":"读写","name":"纬度"},{"identifier":"longitude","time":1777903740503,"value":"111.991425","data_type":"float","access_mode":"读写","name":"经度"},{"identifier":"pillbox_status","data_type":"string","access_mode":"读写","name":"药盒状态"},{"identifier":"temperature","time":1777987754112,"value":"26.87","data_type":"float","access_mode":"读写","name":"温度"}],"msg":"succ","request_id":"ff0e439886734d42981ee138b9182aa8"}

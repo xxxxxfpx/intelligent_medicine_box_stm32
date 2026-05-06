@@ -10,6 +10,7 @@
 #include "GPS.h"
 #include "MLX90614.h"
 #include "OLED.h"
+#include "Servo.h"
 #include "Settings.h"
 #include "USART1.h"
 #include <stdio.h>
@@ -637,28 +638,20 @@ static void MQTT_SendPropertySetReply(const char *id, uint8_t code, const char *
 {
     char cmd[256];
     char data[128];
-
+    
     if(id == NULL) id = "123";
     if(msg == NULL) msg = "success";
-
+    
     snprintf(data, sizeof(data),
         "{\\\"id\\\":\\\"%s\\\"\\,\\\"code\\\":%d\\,\\\"msg\\\":\\\"%s\\\"}",
         id, code, msg);
     Info("  Property Set Reply: %s\r\n", data);
-
+    
     ESP8266_Clear();
     snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/set_reply\",\"%s\",0,0\r\n",
         MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
     Debug("  CMD: %s\r\n", cmd);
     ESP8266_SendCmd(cmd);
-    if(ESP8266_WaitResponse("OK", 3000))
-    {
-        Debug("  MQTT Publish OK\r\n");
-    }
-    else
-    {
-        Error("  MQTT Publish FAIL, rxBuf: %s\r\n", esp8266.buffer);
-    }
 }
 
 uint8_t ESP8266_MQTT_HandleDownlink(void)
@@ -789,6 +782,22 @@ uint8_t ESP8266_MQTT_HandleDownlink(void)
         {
             Info("  [Set] PillRemain\r\n");
             MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
+        else if(strcmp(propName, "Open") == 0)
+        {
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+
+            if(strstr(payload, "\"Open\":true") || strstr(payload, "\"Open\": true"))
+            {
+                Info("  [Servo] Open -> 120 deg\r\n");
+                Servo_RotateAngle(120);
+            }
+            else
+            {
+                Info("  [Servo] Open -> -120 deg (close)\r\n");
+                Servo_RotateAngle(-120);
+            }
             break;
         }
         else if(strcmp(propName, "BatteryStatus") == 0)

@@ -16,6 +16,7 @@
 #include "GPS.h"
 #include "MLX90614.h"
 #include "ESP8266.h"
+#include "Servo.h"
 #include "Settings.h"
 #include "USART1.h"
 #include <stdio.h>
@@ -308,6 +309,9 @@ int main(void)
 
     GPS_Init();
 
+    Servo_Init();
+    Servo_360_Stop();
+
     ESP8266_Init();
 
     while(!ESP8266_GetIP(ipStr))
@@ -367,6 +371,7 @@ int main(void)
     while(1)
     {
         ESP8266_MQTT_HandleDownlink();
+        Servo_Tick();
 
         if(ESP8266_MQTT_IsConnected())
         {

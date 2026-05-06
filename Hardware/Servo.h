@@ -19,5 +19,8 @@ void Servo_360_SetSpeed(int8_t speed);
 void Servo_360_Stop(void);
 void Servo_360_Forward(void);
 void Servo_360_Backward(void);
+void Servo_RotateAngle(int16_t angle);
+uint8_t Servo_IsRotating(void);
+void Servo_Tick(void);
 
 #endif
