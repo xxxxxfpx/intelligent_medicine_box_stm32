@@ -21,14 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,9 +64,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.stm32_box.data.mqtt.DeviceTelemetry
 import com.example.stm32_box.ui.theme.STM32_BOXTheme
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class ControlActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,13 +73,14 @@ class ControlActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 val connectionState by viewModel.connectionState.collectAsState()
                 val telemetry by viewModel.telemetry.collectAsState()
+                val lastMessage by viewModel.lastMessage.collectAsState()
 
                 ControlScreen(
                     isConnected = connectionState.isConnected,
                     telemetry = telemetry,
+                    lastMessage = lastMessage,
                     onBoxOpen = { viewModel.sendBoxOpen() },
                     onBoxClose = { viewModel.sendBoxClose() },
-                    onSendTime = { viewModel.sendTimeSync(System.currentTimeMillis() / 1000) },
                     onSendMedicineTime = { timeStr -> viewModel.sendMedicineTime(timeStr) },
                     onBack = { finish() }
                 )
@@ -96,15 +94,14 @@ class ControlActivity : ComponentActivity() {
 fun ControlScreen(
     isConnected: Boolean,
     telemetry: DeviceTelemetry,
+    lastMessage: String?,
     onBoxOpen: () -> Unit,
     onBoxClose: () -> Unit,
-    onSendTime: () -> Unit,
     onSendMedicineTime: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
 
-    // 用药时间选择状态
     var showTimePicker by remember { mutableStateOf(false) }
     var selectedTime by remember { mutableStateOf("--:--") }
     val timePickerState = rememberTimePickerState(
@@ -119,7 +116,7 @@ fun ControlScreen(
                 title = { Text("药箱控制", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -139,10 +136,9 @@ fun ControlScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 连接状态指示
             ConnectionStatusCard(isConnected = isConnected)
 
-            // 药箱开关控制
+            // 药箱开关
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -166,7 +162,7 @@ fun ControlScreen(
 
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "通过 MQTT 远程控制药箱的打开和关闭",
+                        "远程控制药箱的打开和关闭",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
@@ -180,7 +176,7 @@ fun ControlScreen(
                         Button(
                             onClick = {
                                 if (!isConnected) {
-                                    Toast.makeText(context, "设备未连接，请等待连接成功", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "设备未连接", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 onBoxOpen()
@@ -190,9 +186,7 @@ fun ControlScreen(
                                 .weight(1f)
                                 .height(56.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF4CAF50)
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                         ) {
                             Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(6.dp))
@@ -202,7 +196,7 @@ fun ControlScreen(
                         Button(
                             onClick = {
                                 if (!isConnected) {
-                                    Toast.makeText(context, "设备未连接，请等待连接成功", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "设备未连接", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 onBoxClose()
@@ -212,94 +206,12 @@ fun ControlScreen(
                                 .weight(1f)
                                 .height(56.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFF44336)
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
                         ) {
                             Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("关闭药箱", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
-                    }
-                }
-            }
-
-            // 时间同步
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Schedule,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "时间同步",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "将当前手机时间同步到药箱设备",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // 显示当前手机时间
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                "当前手机时间",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                                    .format(Date()),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            if (!isConnected) {
-                                Toast.makeText(context, "设备未连接，请等待连接成功", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            onSendTime()
-                            Toast.makeText(context, "已下发时间到药箱", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("下发时间到药箱", fontSize = 14.sp)
                     }
                 }
             }
@@ -335,7 +247,6 @@ fun ControlScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // 时间选择显示
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -374,7 +285,7 @@ fun ControlScreen(
                     Button(
                         onClick = {
                             if (!isConnected) {
-                                Toast.makeText(context, "设备未连接，请等待连接成功", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "设备未连接", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
                             if (selectedTime == "--:--") {
@@ -396,7 +307,44 @@ fun ControlScreen(
                 }
             }
 
-            // 最新设备数据
+            // 虚假最新消息
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Email,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "最新消息",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = lastMessage ?: "等待数据...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+            }
+
+            // 设备状态
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -456,7 +404,6 @@ fun ControlScreen(
                 }
             }
 
-            // 提示信息
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f),
@@ -474,7 +421,7 @@ fun ControlScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "指令下发后，请等待设备响应。确保设备在线且 MQTT 连接正常。",
+                        "指令下发后请等待设备响应。确保设备在线且 MQTT 连接正常。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.tertiary,
                         lineHeight = 18.sp
@@ -484,7 +431,7 @@ fun ControlScreen(
         }
     }
 
-    // 时间选择器对话框
+    // 时间选择器
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -505,14 +452,10 @@ fun ControlScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        val hour = timePickerState.hour
-                        val minute = timePickerState.minute
-                        selectedTime = "%02d:%02d".format(hour, minute)
-                        showTimePicker = false
-                    }
-                ) {
+                TextButton(onClick = {
+                    selectedTime = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
+                    showTimePicker = false
+                }) {
                     Text("确认", fontWeight = FontWeight.Bold)
                 }
             },
@@ -529,10 +472,8 @@ fun ControlScreen(
 fun ConnectionStatusCard(isConnected: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = if (isConnected)
-            Color(0xFF4CAF50).copy(alpha = 0.1f)
-        else
-            Color(0xFFF44336).copy(alpha = 0.1f),
+        color = if (isConnected) Color(0xFF4CAF50).copy(alpha = 0.1f)
+        else Color(0xFFF44336).copy(alpha = 0.1f),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
