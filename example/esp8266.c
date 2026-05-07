@@ -1,54 +1,24 @@
-#define ESP8266_USART USART3
-#define ESP8266_BAUDRATE 115200
+static uint8_t r[RX_BUF]; static uint16_t i;
 
-void ESP8266_Init(void)
-{
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-    
-    GPIO_InitTypeDef GPIO_InitStructure;
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(GPIOB, &GPIO_InitStructure);
-    
-    USART_InitTypeDef USART_InitStructure;
-    USART_InitStructure.USART_BaudRate = 115200;
-    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
-    USART_InitStructure.USART_StopBits = USART_StopBits_1;
-    USART_InitStructure.USART_Parity = USART_Parity_No;
-    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-    USART_Init(USART3, &USART_InitStructure);
-    
-    USART_Cmd(USART3, ENABLE);
+void ESP_Send(const char *s) { while (*s) { USART_SendData(USART3, *s++); while (!USART_FLAG_TXE); } }
+uint8_t ESP_Wait(const char *k, uint32_t ms) { uint32_t t=0; while (t<ms) { if (strstr(r,k)) return 1; Delay_ms(10); t+=10; } return 0; }
+
+void WiFi_Join(const char *id, const char *pw) {
+    char b[128]; i=0; sprintf(b, "AT+CWJAP=\"%s\",\"%s\"\r\n", id, pw); ESP_Send(b); ESP_Wait("GOT IP", WIFI_TO);
 }
-
-void ESP8266_SendCmd(const char *cmd)
-{
-    while (*cmd)
-    {
-        while (USART_GetFlagStatus(USART3, USART_FLAG_TXE) == RESET);
-        USART_SendData(USART3, *cmd++);
+void MQTT_Cfg(const char *cid, const char *u, const char *p) {
+    char b[256]; i=0; sprintf(b, "AT+MQTTUSERCFG=0,1,\"%s\",\"%s\",\"%s\",0,0,\"\"\r\n", cid,u,p); ESP_Send(b); ESP_Wait("OK", MQ_TO);
+}
+void MQTT_Conn(const char *h, uint16_t pt) {
+    char b[128]; i=0; sprintf(b, "AT+MQTTCONN=0,\"%s\",%d,0\r\n", h, pt); ESP_Send(b); ESP_Wait("+MQTTCONNECTED:", MQ_TO);
+}
+void MQTT_Pub(const char *tp, const char *d) {
+    char b[512]; i=0; sprintf(b, "AT+MQTTPUB=0,\"%s\",\"%s\",0,0\r\n", tp, d); ESP_Send(b); ESP_Wait("OK", MQ_TO);
+}
+void USART3_IRQHandler(void) {
+     if (USART_GetITStatus(USART3, USART_IT_RXNE)) {
+         uint8_t c=USART_ReceiveData(USART3); 
+         if (i<RX_BUF-1) { r[i++]=c; r[i]=0; } 
+        } 
     }
-}
 
-uint8_t ESP8266_WaitResponse(const char *response, uint32_t timeout)
-{
-    uint32_t startTime = 0;
-    while (startTime < timeout)
-    {
-        if (strstr(buffer, response) != NULL) return 1;
-        if (strstr(buffer, "ERROR") != NULL) return 0;
-        Delay_ms(10);
-        startTime += 10;
-    }
-    return 0;
-}
-
-uint8_t ESP8266_ConnectWiFi(const char *ssid, const char *password)
-{
-    char cmd[128];
-    sprintf(cmd, "AT+CWJAP=\"%s\",\"%s\"\r\n", ssid, password);
-    ESP8266_SendCmd(cmd);
-    return ESP8266_WaitResponse("WIFI GOT IP", 20000);
-}

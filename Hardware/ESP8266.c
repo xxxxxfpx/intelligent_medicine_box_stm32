@@ -21,6 +21,9 @@ static ESP8266_TypeDef esp8266;
 
 static uint8_t mqttConnected = 0;
 
+static uint8_t nextMedHour = 8;
+static uint8_t nextMedMin = 0;
+
 void ESP8266_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
@@ -537,6 +540,24 @@ uint8_t ESP8266_MQTT_PublishPillboxStatus(const char *status)
     return 0;
 }
 
+uint8_t ESP8266_MQTT_PublishLastMedTime(uint64_t timestampMs)
+{
+    char topic[128];
+    char payload[256];
+
+    sprintf(topic, "$sys/%s/%s/thing/property/post", MQTT_PRODUCT_ID, MQTT_DEVICE_NAME);
+    sprintf(payload, "{\\\"id\\\":\\\"123\\\"\\,\\\"version\\\":\\\"1.0\\\"\\,\\\"params\\\":{\\\"NextEat\\\":{\\\"date\\\":%llu}}}", timestampMs);
+
+    Debug("Pub NextEat.date: %llu\r\n", timestampMs);
+    if(ESP8266_MQTT_Publish(topic, payload))
+    {
+        Info("Commit NextEat.date: %llu OK\r\n", timestampMs);
+        return 1;
+    }
+    Error("Commit NextEat.date: %llu FAIL\r\n", timestampMs);
+    return 0;
+}
+
 uint8_t ESP8266_MQTT_HasPendingMessage(void)
 {
     return (strstr(esp8266.buffer, "+MQTTSUBRECV:") != NULL) ? 1 : 0;
@@ -647,11 +668,11 @@ static void MQTT_SendPropertySetReply(const char *id, uint8_t code, const char *
         id, code, msg);
     Info("  Property Set Reply: %s\r\n", data);
     
-    ESP8266_Clear();
     snprintf(cmd, sizeof(cmd), "AT+MQTTPUB=0,\"$sys/%s/%s/thing/property/set_reply\",\"%s\",0,0\r\n",
         MQTT_PRODUCT_ID, MQTT_DEVICE_NAME, data);
     Debug("  CMD: %s\r\n", cmd);
     ESP8266_SendCmd(cmd);
+    Delay_ms(100);
 }
 
 uint8_t ESP8266_MQTT_HandleDownlink(void)
@@ -722,7 +743,7 @@ uint8_t ESP8266_MQTT_HandleDownlink(void)
         return 1;
     }
 
-    while(*obj != '\0')
+    while(*obj != '\0' && obj < payload + len)
     {
         propStart = strchr(obj, '"');
         if(!propStart) break;
@@ -736,7 +757,7 @@ uint8_t ESP8266_MQTT_HandleDownlink(void)
         propName[propLen] = '\0';
 
         obj = propEnd + 1;
-        while(*obj == ':' || *obj == ' ' || *obj == '{' || *obj == '"' || *obj == '}' || *obj == ',')
+        while(obj < payload + len && (*obj == ':' || *obj == ' ' || *obj == '{' || *obj == '"' || *obj == '}' || *obj == ','))
             obj++;
 
         Info("  Property: %s\r\n", propName);
@@ -818,6 +839,22 @@ uint8_t ESP8266_MQTT_HandleDownlink(void)
             MQTT_SendPropertySetReply(msgId, 200, "success");
             break;
         }
+        else if(strcmp(propName, "NextEat") == 0)
+        {
+            char *val = obj;
+            while(*val == ' ' || *val == '"') val++;
+            if(*val >= '0' && *val <= '9')
+            {
+                uint32_t ts = (uint32_t)strtoul(val, NULL, 10);
+                uint32_t daySec = (ts / 1000 + 8 * 3600) % 86400;
+                uint8_t hour = daySec / 3600;
+                uint8_t minute = (daySec % 3600) / 60;
+                ESP8266_MQTT_SetNextMedicineTime(hour, minute);
+                Info("  [Set] NextEat: %02d:%02d\r\n", hour, minute);
+            }
+            MQTT_SendPropertySetReply(msgId, 200, "success");
+            break;
+        }
         else
         {
             Info("  [WARN] Unknown property: %s\r\n", propName);
@@ -828,6 +865,25 @@ uint8_t ESP8266_MQTT_HandleDownlink(void)
 
     ESP8266_Clear();
     return 1;
+}
+
+void ESP8266_MQTT_SetNextMedicineTime(uint8_t hour, uint8_t minute)
+{
+    if(hour > 23) hour = 23;
+    if(minute > 59) minute = 59;
+    nextMedHour = hour;
+    nextMedMin = minute;
+    Info("Next Medicine Time Set: %02d:%02d\r\n", hour, minute);
+}
+
+uint8_t ESP8266_MQTT_GetNextMedicineHour(void)
+{
+    return nextMedHour;
+}
+
+uint8_t ESP8266_MQTT_GetNextMedicineMinute(void)
+{
+    return nextMedMin;
 }
 
 void USART3_IRQHandler(void)

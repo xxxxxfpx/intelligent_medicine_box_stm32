@@ -97,5 +97,7 @@ extern const uint8_t Chinese_Jing2[];
 
 // 汉字: 纬
 extern const uint8_t Chinese_Wei2[];
+extern const uint8_t Chinese_Xia[];
+extern const uint8_t Chinese_Ci[];
 
 #endif /* __CHINESE_FONT_H */

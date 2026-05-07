@@ -58,4 +58,17 @@
 #define SYSTEM_DISPLAY_REFRESH_MS 500  // 显示屏刷新周期(ms)
 #define SYSTEM_TEMP_DECIMAL_PLACES 1   // 温度显示小数位数
 
+/*======================== 温度警告配置 ========================*/
+#define TEMP_WARNING_THRESHOLD      40.0f   // 温度警告阈值(°C)
+#define TEMP_WARNING_SYMBOL         '!'     // 警告符号
+
+/*======================== 语音播报配置 ========================*/
+#define VOICE_HIGH_TEMP_THRESHOLD    38.0f   // 温度过高阈值(°C)
+#define VOICE_MEDICINE_INTERVAL_MIN  60       // 吃药提醒间隔(分钟)
+#define VOICE_GPS_DEVIATION_LIMIT    0.01f    // GPS偏离阈值(度)
+
+/*======================== 默认GPS坐标(用于偏离检测) ========================*/
+#define DEFAULT_LATITUDE   39.9042f   // 默认纬度(北京)
+#define DEFAULT_LONGITUDE  116.4074f  // 默认经度(北京)
+
 #endif

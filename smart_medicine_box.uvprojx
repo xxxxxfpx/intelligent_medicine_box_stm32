@@ -773,6 +773,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\USART1.h</FilePath>
             </File>
+            <File>
+              <FileName>chinese_font.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\chinese_font.c</FilePath>
+            </File>
+            <File>
+              <FileName>chinese_font.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\chinese_font.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

@@ -117,6 +117,7 @@ def query_real_time(params: list[str] | None = None) -> dict | None:
             "TakePillState",
             "latitude",
             "longitude",
+            "NextEat",
         ]
 
     body = {

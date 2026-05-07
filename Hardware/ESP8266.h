@@ -43,6 +43,7 @@ uint8_t ESP8266_MQTT_PublishTemperature(float temperature);
 uint8_t ESP8266_MQTT_PublishAmbientTemp(float ambient_temp);
 uint8_t ESP8266_MQTT_PublishGPS(float latitude, float longitude);
 uint8_t ESP8266_MQTT_PublishPillboxStatus(const char *status);
+uint8_t ESP8266_MQTT_PublishLastMedTime(uint64_t timestampMs);
 
 /**
  * Check if there is a new MQTT subscription message from the broker
@@ -67,5 +68,9 @@ uint16_t ESP8266_MQTT_ParseMessage(char *payloadBuf, uint16_t bufSize);
  * Returns: 1 if a downlink message was handled, 0 if none pending
  */
 uint8_t ESP8266_MQTT_HandleDownlink(void);
+
+void ESP8266_MQTT_SetNextMedicineTime(uint8_t hour, uint8_t minute);
+uint8_t ESP8266_MQTT_GetNextMedicineHour(void);
+uint8_t ESP8266_MQTT_GetNextMedicineMinute(void);
 
 #endif

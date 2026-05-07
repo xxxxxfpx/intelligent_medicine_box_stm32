@@ -22,6 +22,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
+
+static uint64_t DateToTimestampMs(uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second)
+{
+    uint16_t y = 2000 + year;
+    uint8_t m = month;
+    uint8_t d = day;
+    uint32_t days;
+    uint32_t totalSec;
+
+    if (m <= 2) { m += 12; y--; }
+    days = 365 * y + y / 4 - y / 100 + y / 400 + (153 * m - 457) / 5 + d - 306;
+    totalSec = (days - 719529) * 86400 + hour * 3600 + minute * 60 + second;
+    return (uint64_t)totalSec * 1000;
+}
 
 static float NMEAToDecimal(const char *nmeaStr, const char *dir)
 {
@@ -158,6 +173,9 @@ int main_ok(void)
     GPS_InfoTypeDef *gpsInfo;
     float latDecimal = 0.0f, lonDecimal = 0.0f;
     uint8_t hasGpsFix = 0;
+    static uint64_t lastMedTimeMs = 0;
+    static uint8_t medicationTriggered = 0;
+    DS1302_TimeTypeDef currentTime;
 
     Delay_Reset();
 
@@ -258,6 +276,10 @@ int main_ok(void)
                     ESP8266_MQTT_PublishGPS(latDecimal, lonDecimal);
                     Delay_ms(200);
                     ESP8266_MQTT_PublishPillboxStatus("normal");
+                    Delay_ms(200);
+                    DS1302_GetTime(&currentTime);
+                    lastMedTimeMs = DateToTimestampMs(currentTime.year, currentTime.month, currentTime.day, currentTime.hour, currentTime.minute, currentTime.second);
+                    ESP8266_MQTT_PublishLastMedTime(lastMedTimeMs);
                 }
                 else
                 {
@@ -280,15 +302,15 @@ int main(void)
     uint8_t testResult;
     char ipStr[20];
     static uint32_t lastPublishTime = 0;
-    static uint32_t lastPageSwitchTime = 0;
-    static uint32_t lastTimeUpdate = 0;
+    static uint32_t lastDisplayTime = 0;
     static uint8_t currentPage = 0;
-    static uint8_t displayedPage = 0;
     float ambientTemp, objectTemp;
     GPS_InfoTypeDef *gpsInfo;
     float latDecimal = 0.0f, lonDecimal = 0.0f;
     uint8_t hasGpsFix = 0;
     static uint8_t wifiState = 0;
+    static uint64_t lastMedTimeMs = 0;
+    static uint8_t medicationTriggered = 0;
     DS1302_TimeTypeDef currentTime;
 
     Delay_Reset();
@@ -411,6 +433,10 @@ int main(void)
                         Delay_ms(200);
                     }
                     ESP8266_MQTT_PublishPillboxStatus("normal");
+                    Delay_ms(200);
+                    DS1302_GetTime(&currentTime);
+                    lastMedTimeMs = DateToTimestampMs(currentTime.year, currentTime.month, currentTime.day, currentTime.hour, currentTime.minute, currentTime.second);
+                    ESP8266_MQTT_PublishLastMedTime(lastMedTimeMs);
                 }
                 else
                 {
@@ -425,158 +451,149 @@ int main(void)
             Delay_ms(1000);
         }
 
-        /* 3页面自动轮换显示 */
-        if(lastPageSwitchTime == 0 || (Delay_GetTime() - lastPageSwitchTime) > 4000)
+        /* 每100ms更新显示，超过4秒切换页面 */
+        DS1302_GetTime(&currentTime);
+        objectTemp = MLX90614_ReadObjectTemp();
+        ambientTemp = MLX90614_ReadAmbientTemp();
+
+        /* 检查是否到了自动开箱时间 */
+        if (currentTime.hour == ESP8266_MQTT_GetNextMedicineHour() &&
+            currentTime.minute == ESP8266_MQTT_GetNextMedicineMinute())
         {
-            lastPageSwitchTime = Delay_GetTime();
-            DS1302_GetTime(&currentTime);
-
-            /* 将objectTemp和ambientTemp更新为最新值 */
-            objectTemp = MLX90614_ReadObjectTemp();
-            ambientTemp = MLX90614_ReadAmbientTemp();
-
-            OLED_Clear();
-
-            switch(currentPage)
+            if (!medicationTriggered)
             {
-                case 0:  /* 页面1: 年月+时间+温度 */
-                    /* 第1行: "年月:YY/MM/DD" */
-                    OLED_ShowChinese16x16(1, 1, Chinese_Nian);
-                    OLED_ShowChinese16x16(1, 3, Chinese_Yue);
-                    OLED_ShowChar(1, 7, ':');
-                    OLED_ShowNum(1, 8, currentTime.year, 2);
-                    OLED_ShowChar(1, 10, '/');
-                    OLED_ShowNum(1, 11, currentTime.month, 2);
-                    OLED_ShowChar(1, 13, '/');
-                    OLED_ShowNum(1, 14, currentTime.day, 2);
-
-                    /* 第2行: "时间:HH:MM:SS" */
-                    OLED_ShowChinese16x16(2, 1, Chinese_Shi);
-                    OLED_ShowChinese16x16(2, 3, Chinese_Jian);
-                    OLED_ShowChar(2, 7, ':');
-                    OLED_ShowNum(2, 8, currentTime.hour, 2);
-                    OLED_ShowChar(2, 10, ':');
-                    OLED_ShowNum(2, 11, currentTime.minute, 2);
-                    OLED_ShowChar(2, 13, ':');
-                    OLED_ShowNum(2, 14, currentTime.second, 2);
-
-                    /* 第3行: "物温:XX.XC" */
-                    OLED_ShowChinese16x16(3, 1, Chinese_Wu);
-                    OLED_ShowChinese16x16(3, 3, Chinese_Wen);
-                    OLED_ShowChar(3, 7, ':');
-                    if(objectTemp >= 0)
-                    {
-                        OLED_ShowNum(3, 8, (int32_t)objectTemp, 2);
-                    }
-                    else
-                    {
-                        OLED_ShowChar(3, 8, '-');
-                        OLED_ShowNum(3, 9, (int32_t)(-objectTemp), 2);
-                    }
-                    OLED_ShowChar(3, 12, '.');
-                    OLED_ShowNum(3, 13, (int32_t)(objectTemp * 10) % 10, 1);
-                    OLED_ShowChar(3, 14, 'C');
-
-                    /* 第4行: "环境:XX.XC" */
-                    OLED_ShowChinese16x16(4, 1, Chinese_Huan);
-                    OLED_ShowChinese16x16(4, 3, Chinese_Jing);
-                    OLED_ShowChar(4, 7, ':');
-                    if(ambientTemp >= 0)
-                    {
-                        OLED_ShowNum(4, 8, (int32_t)ambientTemp, 2);
-                    }
-                    else
-                    {
-                        OLED_ShowChar(4, 8, '-');
-                        OLED_ShowNum(4, 9, (int32_t)(-ambientTemp), 2);
-                    }
-                    OLED_ShowChar(4, 12, '.');
-                    OLED_ShowNum(4, 13, (int32_t)(ambientTemp * 10) % 10, 1);
-                    OLED_ShowChar(4, 14, 'C');
-                    break;
-
-                case 1:  /* 页面2: 网络+定位+经纬度 */
-                    /* 第1行: "网络:{status}" */
-                    OLED_ShowChinese16x16(1, 1, Chinese_Wang);
-                    OLED_ShowChinese16x16(1, 3, Chinese_Luo2);
-                    OLED_ShowChar(1, 7, ':');
-                    if(wifiState == 1)
-                    {
-                        OLED_ShowChinese16x16(1, 5, Chinese_Zai);
-                        OLED_ShowChinese16x16(1, 6, Chinese_Xian);
-                    }
-                    else if(wifiState == 2)
-                    {
-                        OLED_ShowChinese16x16(1, 5, Chinese_Li);
-                        OLED_ShowChinese16x16(1, 6, Chinese_Xian);
-                    }
-                    else
-                    {
-                        OLED_ShowChinese16x16(1, 5, Chinese_Lian);
-                        OLED_ShowChinese16x16(1, 6, Chinese_Jie);
-                        OLED_ShowChinese16x16(1, 7, Chinese_Zhong);
-                    }
-
-                    /* 第2行: "定位:{status}" */
-                    OLED_ShowChinese16x16(2, 1, Chinese_Ding);
-                    OLED_ShowChinese16x16(2, 3, Chinese_Wei);
-                    OLED_ShowChar(2, 7, ':');
-                    gpsInfo = GPS_GetInfo();
-                    if(gpsInfo->isValid)
-                    {
-                        OLED_ShowChinese16x16(2, 5, Chinese_You);
-                        OLED_ShowChinese16x16(2, 6, Chinese_Xiao);
-                    }
-                    else
-                    {
-                        OLED_ShowChinese16x16(2, 5, Chinese_Sou);
-                        OLED_ShowChinese16x16(2, 6, Chinese_Suo);
-                        OLED_ShowChinese16x16(2, 7, Chinese_Zhong);
-                    }
-
-                    /* 第3行: 经度 (GPS有效时显示) */
-                    if(gpsInfo->isValid)
-                    {
-                        OLED_ShowChinese16x16(3, 1, Chinese_Jing2);
-                        OLED_ShowChinese16x16(3, 3, Chinese_Du);
-                        OLED_ShowChar(3, 7, ':');
-                        OLED_ShowString(3, 8, gpsInfo->longitude);
-                    }
-                    else
-                    {
-                        OLED_ShowString(3, 1, "                ");
-                    }
-
-                    /* 第4行: 纬度 (GPS有效时显示) */
-                    if(gpsInfo->isValid)
-                    {
-                        OLED_ShowChinese16x16(4, 1, Chinese_Wei2);
-                        OLED_ShowChinese16x16(4, 3, Chinese_Du);
-                        OLED_ShowChar(4, 7, ':');
-                        OLED_ShowString(4, 8, gpsInfo->latitude);
-                    }
-                    else
-                    {
-                        OLED_ShowString(4, 1, "                ");
-                    }
-                    break;
+                Info("Auto opening box: Medicine time %02d:%02d\r\n",
+                     ESP8266_MQTT_GetNextMedicineHour(), ESP8266_MQTT_GetNextMedicineMinute());
+                Servo_RotateAngle(120);
+                medicationTriggered = 1;
             }
-
-            displayedPage = currentPage;
-            currentPage = (currentPage + 1) % 2;  /* 循环切换2页面 */
+        }
+        else
+        {
+            medicationTriggered = 0;
         }
 
-        /* 页面0实时刷新时间（每1秒更新） */
-        if(displayedPage == 0 && (Delay_GetTime() - lastTimeUpdate) >= 1000)
+        if(lastDisplayTime == 0 || (Delay_GetTime() - lastDisplayTime) > 4000)
         {
-            lastTimeUpdate = Delay_GetTime();
-            DS1302_GetTime(&currentTime);
+            lastDisplayTime = Delay_GetTime();
+            currentPage = (currentPage + 1) % 2;
+        }
 
-            OLED_ShowNum(2, 8, currentTime.hour, 2);
-            OLED_ShowChar(2, 10, ':');
-            OLED_ShowNum(2, 11, currentTime.minute, 2);
-            OLED_ShowChar(2, 13, ':');
-            OLED_ShowNum(2, 14, currentTime.second, 2);
+        OLED_Clear();
+
+        switch(currentPage)
+        {
+            case 0:  /* 页面0: 年月+时间+温度 */
+                OLED_ShowChinese16x16(1, 1, Chinese_Nian);
+                OLED_ShowChinese16x16(1, 3, Chinese_Yue);
+                OLED_ShowChar(1, 7, ':');
+                OLED_ShowNum(1, 8, currentTime.year, 2);
+                OLED_ShowChar(1, 10, '/');
+                OLED_ShowNum(1, 11, currentTime.month, 2);
+                OLED_ShowChar(1, 13, '/');
+                OLED_ShowNum(1, 14, currentTime.day, 2);
+
+                OLED_ShowChinese16x16(2, 1, Chinese_Shi);
+                OLED_ShowChinese16x16(2, 3, Chinese_Jian);
+                OLED_ShowChar(2, 7, ':');
+                OLED_ShowNum(2, 8, currentTime.hour, 2);
+                OLED_ShowChar(2, 10, ':');
+                OLED_ShowNum(2, 11, currentTime.minute, 2);
+                OLED_ShowChar(2, 13, ':');
+                OLED_ShowNum(2, 14, currentTime.second, 2);
+
+                OLED_ShowChinese16x16(3, 1, Chinese_Wu);
+                OLED_ShowChinese16x16(3, 3, Chinese_Wen);
+                OLED_ShowChar(3, 7, ':');
+                if(objectTemp >= 0)
+                {
+                    OLED_ShowNum(3, 8, (int32_t)objectTemp, 2);
+                    OLED_ShowChar(3, 10, '.');
+                    OLED_ShowNum(3, 11, (int32_t)(objectTemp * 10) % 10, 1);
+                    OLED_ShowChar(3, 12, 'C');
+                    if(objectTemp >= TEMP_WARNING_THRESHOLD)
+                        OLED_ShowChar(3, 13, '!');
+                    else
+                        OLED_ShowChar(3, 13, ' ');
+                }
+                else
+                {
+                    OLED_ShowChar(3, 8, '-');
+                    OLED_ShowNum(3, 9, (int32_t)(-objectTemp), 2);
+                    OLED_ShowChar(3, 11, '.');
+                    OLED_ShowNum(3, 12, (int32_t)(-objectTemp * 10) % 10, 1);
+                    OLED_ShowChar(3, 13, 'C');
+                }
+
+                OLED_ShowChinese16x16(4, 1, Chinese_Xia);
+                OLED_ShowChinese16x16(4, 3, Chinese_Ci);
+                OLED_ShowChar(4, 7, ':');
+                OLED_ShowNum(4, 8, ESP8266_MQTT_GetNextMedicineHour(), 2);
+                OLED_ShowChar(4, 10, ':');
+                OLED_ShowNum(4, 11, ESP8266_MQTT_GetNextMedicineMinute(), 2);
+                break;
+
+            case 1:  /* 页面1: 网络+定位+经纬度 */
+                OLED_ShowChinese16x16(1, 1, Chinese_Wang);
+                OLED_ShowChinese16x16(1, 3, Chinese_Luo2);
+                OLED_ShowChar(1, 7, ':');
+                if(wifiState == 1)
+                {
+                    OLED_ShowChinese16x16(1, 5, Chinese_Zai);
+                    OLED_ShowChinese16x16(1, 6, Chinese_Xian);
+                }
+                else if(wifiState == 2)
+                {
+                    OLED_ShowChinese16x16(1, 5, Chinese_Li);
+                    OLED_ShowChinese16x16(1, 6, Chinese_Xian);
+                }
+                else
+                {
+                    OLED_ShowChinese16x16(1, 5, Chinese_Lian);
+                    OLED_ShowChinese16x16(1, 6, Chinese_Jie);
+                    OLED_ShowChinese16x16(1, 7, Chinese_Zhong);
+                }
+
+                OLED_ShowChinese16x16(2, 1, Chinese_Ding);
+                OLED_ShowChinese16x16(2, 3, Chinese_Wei);
+                OLED_ShowChar(2, 7, ':');
+                gpsInfo = GPS_GetInfo();
+                if(gpsInfo->isValid)
+                {
+                    OLED_ShowChinese16x16(2, 5, Chinese_You);
+                    OLED_ShowChinese16x16(2, 6, Chinese_Xiao);
+                }
+                else
+                {
+                    OLED_ShowChinese16x16(2, 5, Chinese_Sou);
+                    OLED_ShowChinese16x16(2, 6, Chinese_Suo);
+                    OLED_ShowChinese16x16(2, 7, Chinese_Zhong);
+                }
+
+                if(gpsInfo->isValid)
+                {
+                    OLED_ShowChinese16x16(3, 1, Chinese_Jing2);
+                    OLED_ShowChinese16x16(3, 3, Chinese_Du);
+                    OLED_ShowChar(3, 7, ':');
+                    OLED_ShowString(3, 8, gpsInfo->longitude);
+                }
+                else
+                {
+                    OLED_ShowString(3, 1, "                ");
+                }
+
+                if(gpsInfo->isValid)
+                {
+                    OLED_ShowChinese16x16(4, 1, Chinese_Wei2);
+                    OLED_ShowChinese16x16(4, 3, Chinese_Du);
+                    OLED_ShowChar(4, 7, ':');
+                    OLED_ShowString(4, 8, gpsInfo->latitude);
+                }
+                else
+                {
+                    OLED_ShowString(4, 1, "                ");
+                }
+                break;
         }
 
         Delay_ms(100);
@@ -586,7 +603,6 @@ int main(void)
 int main1(void)
 {
     DS1302_TimeTypeDef time;
-    GPS_InfoTypeDef *gpsInfo;
     float objTemp, ambTemp;
     uint8_t testResult;
     char ipStr[20];
@@ -727,24 +743,7 @@ int main1(void)
             Debug("Obj: %.1fC, Amb: %.1fC\r\n", objTemp, ambTemp);
         }
         
-        gpsInfo = GPS_GetInfo();
-        
-        /* if(gpsInfo->isValid) */
-        /* { */
-        /*     OLED_ShowString(4, 1, "GPS: Valid     "); */
-        /* } */
-        /* else if(gpsInfo->frameCount > 0) */
-        /* { */
-        /*     OLED_ShowString(4, 1, "GPS: No Fix    "); */
-        /* } */
-        /* else if(gpsInfo->rxCount > 0) */
-        /* { */
-        /*     OLED_ShowString(4, 1, "GPS: Data RX   "); */
-        /* } */
-        /* else */
-        /* { */
-        /*     OLED_ShowString(4, 1, "GPS: No Data   "); */
-        /* } */
+        /* GPS_GetInfo() 在此处未使用，保留注释供调试参考 */
         
         if(ESP8266_MQTT_IsConnected())
         {
