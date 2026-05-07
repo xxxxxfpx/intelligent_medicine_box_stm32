@@ -69,19 +69,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             STM32_BOXTheme {
                 val viewModel: MainViewModel = viewModel()
-                val connectionState by viewModel.connectionState.collectAsState()
                 val telemetry by viewModel.telemetry.collectAsState()
                 val lastMessage by viewModel.lastMessage.collectAsState()
 
-                // 自动连接 MQTT
+                // 启动模拟数据流用于 UI 展示
                 LaunchedEffect(Unit) {
-                    viewModel.connect()
+                    viewModel.startMockDataStream()
                 }
 
                 DashboardScreen(
-                    isConnected = connectionState.isConnected,
-                    isConnecting = connectionState.isConnecting,
-                    errorMessage = connectionState.errorMessage,
                     telemetry = telemetry,
                     lastMessage = lastMessage
                 )
@@ -93,9 +89,6 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    isConnected: Boolean,
-    isConnecting: Boolean,
-    errorMessage: String?,
     telemetry: DeviceTelemetry,
     lastMessage: String?
 ) {
@@ -110,7 +103,7 @@ fun DashboardScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 actions = {
-                    ConnectionStatusBadge(isConnected, isConnecting)
+                    ConnectionStatusBadge(isConnected = true, isConnecting = false)
                 }
             )
         }
@@ -153,23 +146,6 @@ fun DashboardScreen(
                             Icon(Icons.Default.SettingsRemote, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("药箱控制", fontSize = 13.sp)
-                        }
-                    }
-
-                    // 错误信息
-                    if (errorMessage != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = errorMessage,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(8.dp)
-                            )
                         }
                     }
                 }
