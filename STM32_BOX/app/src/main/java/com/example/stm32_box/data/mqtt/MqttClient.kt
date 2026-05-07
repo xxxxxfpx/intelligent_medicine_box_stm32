@@ -42,7 +42,7 @@ class MqttService private constructor(private val context: Context) {
     private val _incomingMessage = MutableStateFlow<String?>(null)
     val incomingMessage: StateFlow<String?> = _incomingMessage.asStateFlow()
 
-    private val MAX_HISTORY_SIZE = 500
+    private val MAX_HISTORY_SIZE = 1500
     private val _telemetryHistory = MutableStateFlow<List<DeviceTelemetry>>(emptyList())
     val telemetryHistory: StateFlow<List<DeviceTelemetry>> = _telemetryHistory.asStateFlow()
 
@@ -299,5 +299,21 @@ class MqttService private constructor(private val context: Context) {
         _telemetryHistory.value = currentHistory
 
         Log.d(TAG, "注入模拟遥测数据: $data")
+    }
+
+    fun setMockConnected(connected: Boolean) {
+        _connectionState.value = MqttConnectionState(
+            isConnected = connected,
+            isConnecting = false,
+            errorMessage = null
+        )
+        Log.d(TAG, "模拟连接状态: isConnected=$connected")
+    }
+
+    fun seedMockHistory(points: List<DeviceTelemetry>) {
+        if (points.isEmpty()) return
+        _telemetry.value = points.last()
+        _telemetryHistory.value = points
+        Log.d(TAG, "播种 ${points.size} 条模拟历史数据")
     }
 }

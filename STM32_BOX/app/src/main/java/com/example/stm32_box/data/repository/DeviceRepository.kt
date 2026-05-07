@@ -53,4 +53,12 @@ class DeviceRepository(context: Context) {
     fun injectMockData(data: DeviceTelemetry) {
         mqttService.injectTelemetry(data)
     }
+
+    fun setMockConnected(connected: Boolean) {
+        mqttService.setMockConnected(connected)
+    }
+
+    fun seedMockHistory(points: List<DeviceTelemetry>) {
+        mqttService.seedMockHistory(points)
+    }
 }
