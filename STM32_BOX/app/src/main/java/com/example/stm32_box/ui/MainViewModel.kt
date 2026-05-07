@@ -168,13 +168,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * @param segmentOffset 当前 5~10s 时间段的整体偏移量
      */
     private fun generateMockPoint(phase: Double, timestamp: Long, segmentOffset: Float = 0f): DeviceTelemetry {
-        // 1. 正弦波动（慢周期）
+        // 1. 正弦波动
         val waveObj = (sin(phase * 0.12) * 1.5).toFloat()
-        val waveAmb = (sin(phase * 0.1 + 2.0) * 1.0).toFloat()
+        val waveAmb = (sin(phase * 0.08 + 2.0) * 0.3).toFloat()
 
-        // 2. 逐点随机噪声（快速抖动）
+        // 2. 逐点随机噪声
         val objNoise = ((Math.random() - 0.5) * 0.8).toFloat()
-        val ambNoise = ((Math.random() - 0.5) * 0.6).toFloat()
+        val ambNoise = ((Math.random() - 0.5) * 0.15).toFloat()
 
         // GPS 漂移
         val waveLat = (sin(phase * 0.02) * 0.002)
@@ -185,7 +185,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         return DeviceTelemetry(
             objectTemp = 25.5f + waveObj + segmentOffset + objNoise,
-            ambientTemp = 23.0f + waveAmb + (segmentOffset * 0.5f) + ambNoise,
+            ambientTemp = 23.0f + waveAmb + (segmentOffset * 0.1f) + ambNoise,
             latitude = 28.544 + waveLat + (Math.random() - 0.5) * 0.0005,
             longitude = 112.378 + waveLng + (Math.random() - 0.5) * 0.0005,
             status = status,
